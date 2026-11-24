@@ -750,6 +750,12 @@ def has_live_for_session(session_key: str = "", origin_ui_session_id: str = "", 
     return bool(_session_records(_LIVE_STATES, session_key, origin_ui_session_id, parent_session_id))
 
 
+def has_live_dispatched_since(parent_session_id: str, since: float) -> bool:
+    """Whether the spawning session still owns a live delegation it dispatched at or after ``since``."""
+    return any((r.get("dispatched_at") or 0) >= since
+               for r in _session_records(_LIVE_STATES, "", "", parent_session_id))
+
+
 def _new_delegation_id() -> str:
     return f"deleg_{uuid.uuid4().hex[:8]}"
 

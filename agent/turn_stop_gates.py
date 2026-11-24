@@ -33,6 +33,25 @@ class StopGateVerdict:
     pending_verification_response_previewed: Any
 
 
+def _verification_handed_off(agent) -> bool:
+    """True when this turn dispatched a background delegation that is still running.
+
+    Its result re-enters the session as a new turn and carries the check the nudge would ask for.
+    A nudge now cannot be satisfied: the model restates the answer the user already sees, up to
+    once per nudge attempt (#53828)."""
+    session_id = getattr(agent, "session_id", None)
+    turn_started = getattr(agent, "_current_turn_timestamp", None)
+    if not session_id or not isinstance(turn_started, (int, float)):
+        return False
+    try:
+        from tools.async_delegation import has_live_dispatched_since
+
+        return has_live_dispatched_since(str(session_id), float(turn_started))
+    except Exception:
+        logger.debug("pending-delegation check failed", exc_info=True)
+        return False
+
+
 def _verify_on_stop_nudge(agent) -> Optional[str]:
     try:
         from agent.verification_stop import (
@@ -40,6 +59,9 @@ def _verify_on_stop_nudge(agent) -> Optional[str]:
         )
 
         if verify_on_stop_enabled():
+            if _verification_handed_off(agent):
+                logger.debug("verify-on-stop skipped: a background delegation from this turn is still running")
+                return None
             return build_verify_on_stop_nudge(
                 session_id=getattr(agent, "session_id", None),
                 changed_paths=getattr(agent, "_turn_file_mutation_paths", set()),
